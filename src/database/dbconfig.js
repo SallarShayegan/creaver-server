@@ -1,6 +1,6 @@
 module.exports = {
   user: 'sallar',
   host: 'localhost',
-  database: 'musection_db',
+  database: 'creaver_db',
   port: 5432
 };

@@ -1,0 +1,1 @@
+/Applications/Postgres.app/Contents/Versions/11/bin/psql -d creaver_db -f $PWD$"/creaver_backup_26062020.sql" -U sallar

@@ -22,8 +22,8 @@ router.post('/login', (req, res) => {
       else if (!result) return res.status(401).json({ message: 'Invalid password. '});
       const authData = {
         id: payload.id,
-        username: payload.data.username,
-        email: payload.data.email,
+        username: payload.profile_data.username,
+        email: payload.profile_data.email,
         password: payload.password,
       }
       // Check if person has profile image
@@ -36,7 +36,7 @@ router.post('/login', (req, res) => {
   }
   // If login via email
   if (req.body.email) {
-    pool.query("SELECT * FROM people WHERE data ->> 'email' = $1",
+    pool.query("SELECT * FROM people WHERE profile_data ->> 'email' = $1",
                [req.body.email], (err, result) => {
       if (err) return res.status(500).send(err);
       personalData = result.rows[0];
@@ -45,7 +45,7 @@ router.post('/login', (req, res) => {
   }
   // If login via username
   else if (req.body.username) {
-    pool.query("SELECT * FROM people WHERE data ->> 'username' = $1",
+    pool.query("SELECT * FROM people WHERE profile_data ->> 'username' = $1",
                [req.body.username], (err, result) => {
       if (err) return res.status(500).send(err);
       personalData = result.rows[0];
@@ -78,7 +78,6 @@ router.put('/edit-profile', checkAuth, (req, res) => {
     birth_date: Joi.date(),
     city: Joi.string().min(2).max(50),
     country: Joi.string().min(2).max(50),
-    reg_date: Joi.date(), // edit this
     hasImage: Joi.boolean(),
   });
   /*
@@ -105,8 +104,8 @@ router.put('/edit-profile', checkAuth, (req, res) => {
   req.body.data.username = req.body.data.username.toLowerCase();
   req.body.data.email = req.body.data.email.toLowerCase();
   // Updating personal data
-  pool.query('UPDATE people SET data = $2 WHERE id = $1', [req.authData.id, req.body.data])
-    .then(() => res.send('Edited personal data successfully.'))
+  pool.query('UPDATE people SET profile_data = $2 WHERE id = $1', [req.authData.id, req.body.data])
+    .then(() => res.send('Edited profile data successfully.'))
     .catch(err => res.status(400).send(err));
 });
 

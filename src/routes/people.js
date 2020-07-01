@@ -12,7 +12,7 @@ const { checkAuth } = require('../auth/index');
 const pool = new Pool(dbconfig);
 
 router.get('/', (req, res) => {
-  pool.query('SELECT data, id, tracks, followers, following, likes FROM people', (err, result) => {
+  pool.query('SELECT profile_data, id, tracks, followers, following, likes, reg_date FROM people', (err, result) => {
     if (err) return res.status(500).send(err.stack);
     // Check if each person has profile image
     for (let i = 0; i < result.rowCount; i++) {
@@ -24,7 +24,7 @@ router.get('/', (req, res) => {
 });
 
 router.get('/:id', (req, res) => {
-  pool.query('SELECT data, id, tracks, followers, following, likes FROM people WHERE id = $1',
+  pool.query('SELECT profile_data, id, tracks, followers, following, likes, reg_date FROM people WHERE id = $1',
   [req.params.id], (err, result) => {
     if (err) return res.status(500).send(err.stack);
     if (result.rows.length < 1) return res.status(404).json({ message: 'Person not found.' });
@@ -36,8 +36,8 @@ router.get('/:id', (req, res) => {
 });
 
 router.get('/profile/:username', (req, res) => {
-  pool.query("SELECT data, id, tracks, followers, following, likes FROM people WHERE " + 
-  "data ->> 'username' = $1", [req.params.username], (err, result) => {
+  pool.query("SELECT profile_data, id, tracks, followers, following, likes, reg_date FROM people WHERE " + 
+  "profile_data ->> 'username' = $1", [req.params.username], (err, result) => {
     if (err) return res.status(500).send(err.stack);
     if (result.rows.length < 1) return res.status(404).json({ message: 'Person not found.' });
     const personalData = result.rows[0];
@@ -70,109 +70,22 @@ router.post('/', (req, res) => {
     username: personID,
     name: req.body.name,
     email: req.body.email,
-    reg_date: Date.now(),
+    bio: '',
+    city: '',
+    country: '',
+    phone: '',
+    birth_date: '',
+    hasImage: false,
   };
   // Hashing password:
   bcrypt.hash(req.body.password, 10, (err, hash) => {
     if (err) return res.status(500).send(err.stack);
     else {
-      personalData.hasImage = false;
       // Inserting personal data into db
-      pool.query('INSERT INTO people(id, data, password) VALUES ($1, $2, $3)',
-                 [personID, personalData, hash])
+      pool.query('INSERT INTO people(id, data, password, reg_date) VALUES ($1, $2, $3, $4)',
+                 [personID, personalData, hash, Date.now()])
       .then(() => res.send('Added person successfully.'))
       .catch(err => res.status(500).send(err.stack));
-    }
-  });
-});
-
-router.put('/:id', checkAuth, (req, res) => {
-  // Validation:
-  const schema = Joi.object().keys({
-    username: Joi.string().min(4).max(30).required(),
-    name: Joi.string().min(2).max(50).required(),
-    email: Joi.string().email().required(),
-    phone: Joi.string().min(8).max(20), // edit this
-    birth_date: Joi.date(),
-    city: Joi.string().min(2).max(50),
-    country: Joi.string().min(2).max(50),
-    reg_date: Joi.date(), // edit this
-    hasImage: Joi.boolean(),
-  });
-  const result = Joi.validate(req.body.data, schema);
-  if (result.error) return res.status(400).send(result.error.details[0].message);
-  // Setting username and email to lowercase
-  req.body.data.username = req.body.data.username.toLowerCase();
-  req.body.data.email = req.body.data.email.toLowerCase();
-  // Updating personal data
-  pool.query('UPDATE people SET data = $2 WHERE id = $1', [req.params.id, req.body.data])
-    .then(() => res.send('Edited personal data successfully.'))
-    .catch(err => res.status(400).send(err));
-});
-
-router.put('/:id/change-image', upload.profileImage.single('image'), (req, res) => {
-  res.send('Changed profile image successfully.');
-});
-
-router.put('/:id/remove-image', checkAuth, async (req, res) => {
-  try {
-    // Remove image file
-    fs.unlinkSync(`./images/profiles/${req.params.id}.jpg`);
-    res.send('Profile image removed successfully.');
-  }
-  catch (err) {
-    res.status(500).send(err);
-  }
-});
-
-router.put('/:follower_id/follow/:following_id', checkAuth, (req, res) => {
-  if (!req.params.follower_id || !req.params.following_id) return res.status(400).json({ message: 'Invalid id.' });
-  pool.connect(async (err, client, done) => {
-    if(err) return res.status(500).send(err.stack);
-    try {
-      const followers = await client.query('SELECT followers FROM people WHERE id = $1', [req.params.following_id]);
-      if (followers.rows.length < 1) return res.status(404).send('Person not found.');
-      else if (followers.rows[0].followers.includes(req.params.follower_id)) {
-        return res.json({ message: 'Allready added.' });
-      }
-      await client.query('UPDATE people SET followers = array_append((SELECT followers FROM people WHERE id = $2),' +
-      '$1) WHERE id = $2', [req.params.follower_id, req.params.following_id]);
-
-      const following = await client.query('SELECT following FROM people WHERE id = $1', [req.params.follower_id]);
-      if (following.rows.length < 1) return res.status(404).send('Person not found.');
-      else if (following.rows[0].following.includes(req.params.following_id)) {
-        return res.json({ message: 'Allready added.' });
-      }
-      await client.query('UPDATE people SET following = array_append((SELECT following FROM people WHERE id = $2),' +
-      '$1) WHERE id = $2', [req.params.following_id, req.params.follower_id]);
-      
-      res.json({ message: 'Added successfully.' });
-    }
-    catch (err) {
-      res.status(500).send(err);
-    }
-  });
-});
-
-router.put('/:follower_id/unfollow/:following_id', checkAuth, (req, res) => {
-  if (!req.params.follower_id || !req.params.following_id) return res.status(400).json({ message: 'Invalid id.' });
-  pool.connect(async (err, client, done) => {
-    if (err) return res.status(500).send(err.stack);
-    try {
-      const followers = await client.query('SELECT followers FROM people WHERE id = $1', [req.params.following_id]);
-      if (followers.rows.length < 1) return res.status(404).send('Person not found.');
-      await client.query('UPDATE people SET followers = array_remove((SELECT followers FROM people WHERE id = $2),' +
-      '$1) WHERE id = $2', [req.params.follower_id, req.params.following_id]);
-
-      const following = await client.query('SELECT following FROM people WHERE id = $1', [req.params.follower_id]);
-      if (following.rows.length < 1) return res.status(404).send('Person not found.');
-      await client.query('UPDATE people SET following = array_remove((SELECT following FROM people WHERE id = $2),' +
-      '$1) WHERE id = $2', [req.params.following_id, req.params.follower_id]);
-
-      res.json({ message: 'Unfollowed successfully.' });
-    }
-    catch (err) {
-      res.status(500).send(err);
     }
   });
 });

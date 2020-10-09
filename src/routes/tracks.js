@@ -106,6 +106,63 @@ upload.track.single('track'),
   });
 });
 
+router.post('/:id/comment', checkAuth, (req, res) => {
+  const comment = req.body.comment;
+  // [Validation]
+  // getting comments to find out avaliable id for new comment
+  pool.query('SELECT comments FROM music where id = $1', [req.params.id], (err, result) => {
+    if (err) return res.status(500).send(err.stack);
+    let id = 0;
+    const comments = result.rows[0].comments;
+    if (comments.length > 0) {
+      const ids = [];
+      // getting an array of ids
+      comments.forEach(cm => {
+        ids.push(cm.id);
+      })
+      // finding out smallest avaliable id
+      if (ids) while (ids.includes(id)) id++;
+    }
+    // set comment id
+    comment.id = id;
+    pool.query('UPDATE music SET comments = array_append(comments, $2) where id = $1', [req.params.id, comment], (err, result) => {
+      if (err) return res.status(500).send(err.stack);
+      res.send('Comment added successfully.');
+    })
+  })
+});
+
+router.delete('/:id/comment/:cm_id', checkAuth, (req, res) => {
+  pool.query('SELECT comments FROM music where id = $1', [req.params.id], (err, result) => {
+    if (err) return res.status(500).send(err.stack);
+    let comments = result.rows[0].comments;
+    let i = 0;
+    while (i < comments.length && comments[i].id != req.params.cm_id) i++;
+    comments.splice(i, 1);
+    pool.query('UPDATE music SET comments = $2 where id = $1', [req.params.id, comments], (err, result2) => {
+      if (err) return res.status(500).send(err.stack);
+      res.json({
+        message: 'Deleted comment successfully.',
+        comments: comments,
+      });
+    });
+  });
+});
+
+router.put('/:id/comment/:cm_id/reply', checkAuth, (req, res) => {
+  pool.query('SELECT comments FROM music where id = $1', [req.params.id], (err, result) => {
+    if (err) return res.status(500).send(err.stack);
+    const comments = result.rows[0].comments;
+    comments.forEach(cm => {
+      if (cm.id = req.params.cm_id) cm.answer = req.body.answer;
+    });
+    pool.query('UPDATE music SET comments = $2 where id = $1', [req.params.id, comments], (err, result2) => {
+      if (err) return res.status(500).send(err.stack);
+      res.send('Added reply successfully.')
+    });
+  });
+});
+
 router.put('/:id/change-image', upload.trackImage.single('image'), (req, res) => {
   res.send('Track image updated successfully.');
 });
